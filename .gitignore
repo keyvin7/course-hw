@@ -1,0 +1,8 @@
+readme.txt
+
+meta.txt
+
+*.tfstate
+*.tfstate.*
+
+.terraform/

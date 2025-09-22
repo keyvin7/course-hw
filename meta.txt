@@ -1,8 +1,0 @@
-#cloud-config
-users:
-  - name: chupin
-    groups: sudo
-    shell: /bin/bash
-    sudo: 'ALL=(ALL) NOPASSWD:ALL'
-    ssh_authorized_keys:
-      - ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQCt/jYipQ37/oJyTnIfNodFMuFn1MMNI2hUJuhqF83p4YIMUmYS5tzMpp6QBO6JGRXdwzLv/GxqF5IDvLhhe5UslatnjWQmgiM1vTpzTOQlHFd1vt0DquATLizY70/S3qnMJFJr/v7n6kRWX0GhPZD6ED28Geui0vh1Y/+W7OSg+rLYlZbWXGv2ejJYMQyMa+IQbgCIj4thsCFvlBcTAYQGgruiNaSwQzaYABSmaWVKu5q7IkemXUCVG2F8mp3vwO/jxmnvvjg4l5602gf+rkL92adQOOlM80hqzaAz5W5/GyVGJrxf9JywccLk9ZrHQGiLkvLaVhQVH6GawIPcMqFF
