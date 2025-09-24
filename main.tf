@@ -53,6 +53,7 @@ resource "yandex_compute_instance" "vm-server-1" {
 
   network_interface {
     subnet_id = yandex_vpc_subnet.subnet-int-1.id
+    nat       = true
   }
 
   metadata = {
@@ -75,6 +76,7 @@ resource "yandex_compute_instance" "vm-server-2" {
 
   network_interface {
     subnet_id = yandex_vpc_subnet.subnet-int-2.id
+    nat       = true
   }
 
   metadata = {
@@ -82,29 +84,78 @@ resource "yandex_compute_instance" "vm-server-2" {
   }
 }
 
+resource "yandex_compute_instance" "vm-bastion" {
+  name = "vm-bastion"
+  zone = "ru-central1-b"
+
+  resources {
+    cores  = 2
+    memory = 4
+  }
+
+  boot_disk {
+    disk_id = yandex_compute_disk.boot-disk-bastion.id
+  }
+
+  network_interface {
+    subnet_id = yandex_vpc_subnet.subnet-ext.id
+    nat       = true
+  }
+
+  metadata = {
+    user-data = "${file("/home/chupin/course-hw/meta.txt")}"
+  }
+}
+
+
 resource "yandex_vpc_network" "network-1" {
   name = "network1"
 }
 
 resource "yandex_vpc_subnet" "subnet-int-1" {
-  name           = "subnet1-int-1"
+  name           = "subnet-int-1"
   zone           = "ru-central1-a"
   network_id     = yandex_vpc_network.network-1.id
   v4_cidr_blocks = ["192.168.10.0/24"]
 }
 
 resource "yandex_vpc_subnet" "subnet-int-2" {
-  name           = "subnet1-int-2"
+  name           = "subnet-int-2"
   zone           = "ru-central1-b"
   network_id     = yandex_vpc_network.network-1.id
   v4_cidr_blocks = ["192.168.20.0/24"]
 }
 
-
-output "internal_ip_address_vm_server_1" {
-  value = yandex_compute_instance.vm-server-1.network_interface.0.ip_address
+resource "yandex_vpc_subnet" "subnet-ext" {
+  name           = "subnet-ext"
+  zone           = "ru-central1-b"
+  network_id     = yandex_vpc_network.network-1.id
+  v4_cidr_blocks = ["192.168.30.0/24"]
 }
 
-output "internal_ip_address_vm_server_2" {
-  value = yandex_compute_instance.vm-server-2.network_interface.0.ip_address
+locals {
+  bastion_external_ip = yandex_compute_instance.vm-bastion.network_interface.0.nat_ip_address
+  bastion_internal_ip = yandex_compute_instance.vm-bastion.network_interface.0.ip_address
+}
+
+output "ansible_inventory" {
+  value = templatefile("${path.module}/ansible_inventory.tpl", {
+    bastion_external_ip = yandex_compute_instance.vm-bastion.network_interface.0.nat_ip_address
+    bastion_internal_ip = yandex_compute_instance.vm-bastion.network_interface.0.ip_address
+  })
+  description = "Содержимое для Ansible inventory файла"
+}
+
+resource "local_file" "ansible_inventory" {
+  content = templatefile("${path.module}/ansible_inventory.tpl", {
+    bastion_external_ip = yandex_compute_instance.vm-bastion.network_interface.0.nat_ip_address
+    bastion_internal_ip = yandex_compute_instance.vm-bastion.network_interface.0.ip_address
+  })
+  filename = "${path.module}/terraform_generated.ini"
+
+  depends_on = [
+    yandex_compute_instance.vm-bastion,
+    yandex_compute_instance.vm-server-1,
+    yandex_compute_instance.vm-server-2
+  ]
 }

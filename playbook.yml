@@ -1,0 +1,23 @@
+# simple-bastion-nginx.yml
+---
+- name: Simple nginx installation on bastion
+  hosts: vm-bastion
+  become: yes
+
+  tasks:
+    - name: Install nginx
+      apt:
+        name: nginx
+        state: present
+        update_cache: yes
+
+    - name: Start and enable nginx service
+      systemd:
+        name: nginx
+        state: started
+        enabled: yes
+
+    - name: Create test page
+      copy:
+        content: "<h1>Bastion Nginx Works!</h1><p>Host: {{ inventory_hostname }}</p>"
+        dest: /var/www/html/index.html
