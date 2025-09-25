@@ -134,22 +134,52 @@ resource "yandex_vpc_subnet" "subnet-ext" {
 }
 
 locals {
+  bastion_name        = yandex_compute_instance.vm-bastion.name
   bastion_external_ip = yandex_compute_instance.vm-bastion.network_interface.0.nat_ip_address
   bastion_internal_ip = yandex_compute_instance.vm-bastion.network_interface.0.ip_address
+  bastion_zone        = yandex_compute_instance.vm-bastion.zone
+  vm_1_name           = yandex_compute_instance.vm-server-1.name
+  vm_1_external_ip    = yandex_compute_instance.vm-server-1.network_interface.0.nat_ip_address
+  vm_1_internal_ip    = yandex_compute_instance.vm-server-1.network_interface.0.ip_address
+  vm_1_zone           = yandex_compute_instance.vm-server-1.zone
+  vm_2_name           = yandex_compute_instance.vm-server-2.name
+  vm_2_external_ip    = yandex_compute_instance.vm-server-2.network_interface.0.nat_ip_address
+  vm_2_internal_ip    = yandex_compute_instance.vm-server-2.network_interface.0.ip_address
+  vm_2_zone           = yandex_compute_instance.vm-server-2.zone
 }
 
 output "ansible_inventory" {
   value = templatefile("${path.module}/ansible_inventory.tpl", {
+    bastion_name        = yandex_compute_instance.vm-bastion.name
     bastion_external_ip = yandex_compute_instance.vm-bastion.network_interface.0.nat_ip_address
     bastion_internal_ip = yandex_compute_instance.vm-bastion.network_interface.0.ip_address
+    bastion_zone        = yandex_compute_instance.vm-bastion.zone
+    vm_1_name           = yandex_compute_instance.vm-server-1.name
+    vm_1_external_ip    = yandex_compute_instance.vm-server-1.network_interface.0.nat_ip_address
+    vm_1_internal_ip    = yandex_compute_instance.vm-server-1.network_interface.0.ip_address
+    vm_1_zone           = yandex_compute_instance.vm-server-1.zone
+    vm_2_name           = yandex_compute_instance.vm-server-2.name
+    vm_2_external_ip    = yandex_compute_instance.vm-server-2.network_interface.0.nat_ip_address
+    vm_2_internal_ip    = yandex_compute_instance.vm-server-2.network_interface.0.ip_address
+    vm_2_zone           = yandex_compute_instance.vm-server-2.zone
   })
   description = "Содержимое для Ansible inventory файла"
 }
 
 resource "local_file" "ansible_inventory" {
   content = templatefile("${path.module}/ansible_inventory.tpl", {
+    bastion_name        = yandex_compute_instance.vm-bastion.name
     bastion_external_ip = yandex_compute_instance.vm-bastion.network_interface.0.nat_ip_address
     bastion_internal_ip = yandex_compute_instance.vm-bastion.network_interface.0.ip_address
+    bastion_zone        = yandex_compute_instance.vm-bastion.zone
+    vm_1_name           = yandex_compute_instance.vm-server-1.name
+    vm_1_external_ip    = yandex_compute_instance.vm-server-1.network_interface.0.nat_ip_address
+    vm_1_internal_ip    = yandex_compute_instance.vm-server-1.network_interface.0.ip_address
+    vm_1_zone           = yandex_compute_instance.vm-server-1.zone
+    vm_2_name           = yandex_compute_instance.vm-server-2.name
+    vm_2_external_ip    = yandex_compute_instance.vm-server-2.network_interface.0.nat_ip_address
+    vm_2_internal_ip    = yandex_compute_instance.vm-server-2.network_interface.0.ip_address
+    vm_2_zone           = yandex_compute_instance.vm-server-2.zone
   })
   filename = "${path.module}/terraform_generated.ini"
 

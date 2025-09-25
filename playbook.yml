@@ -1,7 +1,7 @@
-# simple-bastion-nginx.yml
+# playbook.yml
 ---
-- name: Simple nginx installation on bastion
-  hosts: vm-bastion
+- name: Simple nginx installation on vm's
+  hosts: web
   become: yes
 
   tasks:
@@ -11,13 +11,39 @@
         state: present
         update_cache: yes
 
+    - name: Create directory for website
+      file:
+        path: /var/www/html
+        state: directory
+        owner: www-data
+        group: www-data
+        mode: '0755'
+
+    - name: Copy website files
+      copy:
+        src: /home/chupin/course-hw/index.html
+        dest: /var/www/html/
+        owner: www-data
+        group: www-data
+        mode: '0644'
+        directory_mode: '0755'
+
+    - name: Copy nginx configuration
+      copy:
+        src: /home/chupin/course-hw/nginx.conf
+        dest: /etc/nginx/sites-available/default
+        backup: yes
+      notify: restart nginx
+
+
     - name: Start and enable nginx service
       systemd:
         name: nginx
         state: started
         enabled: yes
 
-    - name: Create test page
-      copy:
-        content: "<h1>Bastion Nginx Works!</h1><p>Host: {{ inventory_hostname }}</p>"
-        dest: /var/www/html/index.html
+  handlers:
+    - name: restart nginx
+      systemd:
+        name: nginx
+        state: restarted
