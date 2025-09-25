@@ -133,6 +133,92 @@ resource "yandex_vpc_subnet" "subnet-ext" {
   v4_cidr_blocks = ["192.168.30.0/24"]
 }
 
+resource "yandex_vpc_subnet" "public-subnet-alb" {
+  name           = "public-subnet-alb"
+  zone           = "ru-central1-a"
+  network_id     = yandex_vpc_network.network-1.id
+  v4_cidr_blocks = ["192.168.40.0/24"]
+}
+
+resource "yandex_alb_target_group" "web-server-target-group" {
+  name = "web-server-target-group"
+
+  target {
+    subnet_id  = yandex_vpc_subnet.subnet-int-1.id
+    ip_address = yandex_compute_instance.vm-server-1.network_interface.0.ip_address
+  }
+
+  target {
+    subnet_id  = yandex_vpc_subnet.subnet-int-2.id
+    ip_address = yandex_compute_instance.vm-server-2.network_interface.0.ip_address
+  }
+}
+
+resource "yandex_alb_backend_group" "web-server-backend-group" {
+  name = "web-server-backend-group"
+
+  http_backend {
+    name             = "web-server-http-backend"
+    port             = 80
+    target_group_ids = ["${yandex_alb_target_group.web-server-target-group.id}"]
+
+    healthcheck {
+      timeout          = "5s"
+      interval         = "5s"
+      healthcheck_port = 80
+      http_healthcheck {
+        path = "/"
+      }
+    }
+  }
+}
+
+resource "yandex_alb_http_router" "web-router" {
+  name = "web-router"
+}
+
+resource "yandex_alb_virtual_host" "web-virtual-host" {
+  name           = "web-virtual-host"
+  http_router_id = yandex_alb_http_router.web-router.id # Ссылка на HTTP Router
+  authority      = ["*"]                                # Обрабатывать запросы с любого домена
+
+  route {
+    name = "root-route"
+    http_route {
+      http_route_action {
+        backend_group_id = yandex_alb_backend_group.web-server-backend-group.id # Ссылка на Backend Group
+      }
+    }
+  }
+}
+
+resource "yandex_alb_load_balancer" "web-server-balancer" {
+  name       = "web-server-balancer"
+  network_id = yandex_vpc_network.network-1.id # Ссылка на сеть VPC
+
+  allocation_policy {
+    location {
+      zone_id   = "ru-central1-a"
+      subnet_id = yandex_vpc_subnet.public-subnet-alb.id # Публичная подсеть для ALB
+    }
+  }
+
+  listener {
+    name = "web-listener"
+    endpoint {
+      address {
+        external_ipv4_address {} # Запросить публичный IP-адрес
+      }
+      ports = [80]
+    }
+    http {
+      handler {
+        http_router_id = yandex_alb_http_router.web-router.id # Финальная ссылка на HTTP Router
+      }
+    }
+  }
+}
+
 locals {
   bastion_name        = yandex_compute_instance.vm-bastion.name
   bastion_external_ip = yandex_compute_instance.vm-bastion.network_interface.0.nat_ip_address
