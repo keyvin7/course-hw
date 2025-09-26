@@ -53,6 +53,80 @@ resource "yandex_compute_disk" "boot-disk-grafana" {
   image_id = "fd888dplf7gt1nguheht"
 }
 
+resource "yandex_compute_disk" "boot-disk-elasticsearch" {
+  name     = "boot-disk-elasticsearch"
+  type     = "network-hdd"
+  zone     = "ru-central1-b"
+  size     = "50"
+  image_id = "fd888dplf7gt1nguheht"
+}
+
+resource "yandex_compute_disk" "boot-disk-kibana" {
+  name     = "boot-disk-kibana"
+  type     = "network-hdd"
+  zone     = "ru-central1-b"
+  size     = "50"
+  image_id = "fd888dplf7gt1nguheht"
+}
+
+resource "yandex_vpc_security_group" "sg_bastion" {
+  name        = "sg_bastion"
+  network_id  = yandex_vpc_network.network-1.id
+
+  ingress {
+    protocol       = "TCP"
+    port           = 22
+    v4_cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  egress {
+    protocol       = "ANY"
+    description    = "rule2 description"
+    v4_cidr_blocks = ["0.0.0.0/0"]
+  }
+
+}
+
+resource "yandex_vpc_security_group" "sg_vm" {
+  name        = "sg_vm"
+  network_id  = yandex_vpc_network.network-1.id
+
+  ingress {
+    protocol       = "TCP"
+    port           = 22
+    v4_cidr_blocks = ["192.168.30.34/32", "130.193.46.85/32"]
+  }
+
+  ingress {
+    protocol       = "TCP"
+    port           = 80
+    v4_cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  egress {
+    protocol       = "ANY"
+    description    = "rule2 description"
+    v4_cidr_blocks = ["0.0.0.0/0"]
+  }
+
+}
+
+resource "yandex_compute_snapshot_schedule" "default" {
+  name = "daily-backup"
+
+  schedule_policy {
+    expression = "10 16 * * *" # Каждый день в 19:10 по московскому времени
+  }
+
+  snapshot_count = 7 # Хранить последние 7 снимков для каждого диска
+
+  snapshot_spec {
+    description = "Ежедневный снимок"
+  }
+
+  disk_ids = ["fhmotqip5blkj94eu66i", "epdqhlk2oqbijkl0uqqb"]
+}
+
 resource "yandex_compute_instance" "vm-server-1" {
   name = "vm-server-1"
   zone = "ru-central1-a"
@@ -69,6 +143,7 @@ resource "yandex_compute_instance" "vm-server-1" {
   network_interface {
     subnet_id = yandex_vpc_subnet.subnet-int-1.id
     nat       = true
+    security_group_ids = [ yandex_vpc_security_group.sg_vm.id ]
   }
 
   metadata = {
@@ -92,6 +167,7 @@ resource "yandex_compute_instance" "vm-server-2" {
   network_interface {
     subnet_id = yandex_vpc_subnet.subnet-int-2.id
     nat       = true
+    security_group_ids = [ yandex_vpc_security_group.sg_vm.id ]
   }
 
   metadata = {
@@ -115,6 +191,7 @@ resource "yandex_compute_instance" "vm-bastion" {
   network_interface {
     subnet_id = yandex_vpc_subnet.subnet-ext.id
     nat       = true
+    security_group_ids = [ yandex_vpc_security_group.sg_bastion.id ]
   }
 
   metadata = {
@@ -168,6 +245,52 @@ resource "yandex_compute_instance" "vm-grafana" {
   }
 }
 
+resource "yandex_compute_instance" "vm-elasticsearch" {
+  name = "vm-elasticsearch"
+  zone = "ru-central1-b"
+
+  resources {
+    cores  = 2
+    memory = 4
+  }
+
+  boot_disk {
+    disk_id = yandex_compute_disk.boot-disk-elasticsearch.id
+  }
+
+  network_interface {
+    subnet_id = yandex_vpc_subnet.subnet-int-elasticsearch.id
+    nat       = true
+  }
+
+  metadata = {
+    user-data = "${file("/home/chupin/course-hw/meta.txt")}"
+  }
+}
+
+resource "yandex_compute_instance" "vm-kibana" {
+  name = "vm-kibana"
+  zone = "ru-central1-b"
+
+  resources {
+    cores  = 2
+    memory = 4
+  }
+
+  boot_disk {
+    disk_id = yandex_compute_disk.boot-disk-kibana.id
+  }
+
+  network_interface {
+    subnet_id = yandex_vpc_subnet.subnet-int-kibana.id
+    nat       = true
+  }
+
+  metadata = {
+    user-data = "${file("/home/chupin/course-hw/meta.txt")}"
+  }
+}
+
 resource "yandex_vpc_network" "network-1" {
   name = "network1"
 }
@@ -212,6 +335,20 @@ resource "yandex_vpc_subnet" "public-subnet-alb" {
   zone           = "ru-central1-a"
   network_id     = yandex_vpc_network.network-1.id
   v4_cidr_blocks = ["192.168.40.0/24"]
+}
+
+resource "yandex_vpc_subnet" "subnet-int-elasticsearch" {
+  name           = "subnet-int-elasticsearch"
+  zone           = "ru-central1-b"
+  network_id     = yandex_vpc_network.network-1.id
+  v4_cidr_blocks = ["192.168.80.0/24"]
+}
+
+resource "yandex_vpc_subnet" "subnet-int-kibana" {
+  name           = "subnet-int-kibana"
+  zone           = "ru-central1-b"
+  network_id     = yandex_vpc_network.network-1.id
+  v4_cidr_blocks = ["192.168.70.0/24"]
 }
 
 resource "yandex_alb_target_group" "web-server-target-group" {
@@ -294,52 +431,64 @@ resource "yandex_alb_load_balancer" "web-server-balancer" {
 }
 
 locals {
-  bastion_name        = yandex_compute_instance.vm-bastion.name
-  bastion_external_ip = yandex_compute_instance.vm-bastion.network_interface.0.nat_ip_address
-  bastion_internal_ip = yandex_compute_instance.vm-bastion.network_interface.0.ip_address
-  bastion_zone        = yandex_compute_instance.vm-bastion.zone
-  vm_1_name           = yandex_compute_instance.vm-server-1.name
-  vm_1_external_ip    = yandex_compute_instance.vm-server-1.network_interface.0.nat_ip_address
-  vm_1_internal_ip    = yandex_compute_instance.vm-server-1.network_interface.0.ip_address
-  vm_1_zone           = yandex_compute_instance.vm-server-1.zone
-  vm_2_name           = yandex_compute_instance.vm-server-2.name
-  vm_2_external_ip    = yandex_compute_instance.vm-server-2.network_interface.0.nat_ip_address
-  vm_2_internal_ip    = yandex_compute_instance.vm-server-2.network_interface.0.ip_address
-  vm_2_zone           = yandex_compute_instance.vm-server-2.zone
+  bastion_name           = yandex_compute_instance.vm-bastion.name
+  bastion_external_ip    = yandex_compute_instance.vm-bastion.network_interface.0.nat_ip_address
+  bastion_internal_ip    = yandex_compute_instance.vm-bastion.network_interface.0.ip_address
+  bastion_zone           = yandex_compute_instance.vm-bastion.zone
+  vm_1_name              = yandex_compute_instance.vm-server-1.name
+  vm_1_external_ip       = yandex_compute_instance.vm-server-1.network_interface.0.nat_ip_address
+  vm_1_internal_ip       = yandex_compute_instance.vm-server-1.network_interface.0.ip_address
+  vm_1_zone              = yandex_compute_instance.vm-server-1.zone
+  vm_2_name              = yandex_compute_instance.vm-server-2.name
+  vm_2_external_ip       = yandex_compute_instance.vm-server-2.network_interface.0.nat_ip_address
+  vm_2_internal_ip       = yandex_compute_instance.vm-server-2.network_interface.0.ip_address
+  vm_2_zone              = yandex_compute_instance.vm-server-2.zone
+  prometheus_name        = yandex_compute_instance.vm-prometheus.name
+  prometheus_external_ip = yandex_compute_instance.vm-prometheus.network_interface.0.nat_ip_address
+  prometheus_internal_ip = yandex_compute_instance.vm-prometheus.network_interface.0.ip_address
+  prometheus_zone        = yandex_compute_instance.vm-prometheus.zone
 }
 
 output "ansible_inventory" {
   value = templatefile("${path.module}/ansible_inventory.tpl", {
-    bastion_name        = yandex_compute_instance.vm-bastion.name
-    bastion_external_ip = yandex_compute_instance.vm-bastion.network_interface.0.nat_ip_address
-    bastion_internal_ip = yandex_compute_instance.vm-bastion.network_interface.0.ip_address
-    bastion_zone        = yandex_compute_instance.vm-bastion.zone
-    vm_1_name           = yandex_compute_instance.vm-server-1.name
-    vm_1_external_ip    = yandex_compute_instance.vm-server-1.network_interface.0.nat_ip_address
-    vm_1_internal_ip    = yandex_compute_instance.vm-server-1.network_interface.0.ip_address
-    vm_1_zone           = yandex_compute_instance.vm-server-1.zone
-    vm_2_name           = yandex_compute_instance.vm-server-2.name
-    vm_2_external_ip    = yandex_compute_instance.vm-server-2.network_interface.0.nat_ip_address
-    vm_2_internal_ip    = yandex_compute_instance.vm-server-2.network_interface.0.ip_address
-    vm_2_zone           = yandex_compute_instance.vm-server-2.zone
+    bastion_name           = yandex_compute_instance.vm-bastion.name
+    bastion_external_ip    = yandex_compute_instance.vm-bastion.network_interface.0.nat_ip_address
+    bastion_internal_ip    = yandex_compute_instance.vm-bastion.network_interface.0.ip_address
+    bastion_zone           = yandex_compute_instance.vm-bastion.zone
+    vm_1_name              = yandex_compute_instance.vm-server-1.name
+    vm_1_external_ip       = yandex_compute_instance.vm-server-1.network_interface.0.nat_ip_address
+    vm_1_internal_ip       = yandex_compute_instance.vm-server-1.network_interface.0.ip_address
+    vm_1_zone              = yandex_compute_instance.vm-server-1.zone
+    vm_2_name              = yandex_compute_instance.vm-server-2.name
+    vm_2_external_ip       = yandex_compute_instance.vm-server-2.network_interface.0.nat_ip_address
+    vm_2_internal_ip       = yandex_compute_instance.vm-server-2.network_interface.0.ip_address
+    vm_2_zone              = yandex_compute_instance.vm-server-2.zone
+    prometheus_name        = yandex_compute_instance.vm-prometheus.name
+    prometheus_external_ip = yandex_compute_instance.vm-prometheus.network_interface.0.nat_ip_address
+    prometheus_internal_ip = yandex_compute_instance.vm-prometheus.network_interface.0.ip_address
+    prometheus_zone        = yandex_compute_instance.vm-prometheus.zone
   })
   description = "Содержимое для Ansible inventory файла"
 }
 
 resource "local_file" "ansible_inventory" {
   content = templatefile("${path.module}/ansible_inventory.tpl", {
-    bastion_name        = yandex_compute_instance.vm-bastion.name
-    bastion_external_ip = yandex_compute_instance.vm-bastion.network_interface.0.nat_ip_address
-    bastion_internal_ip = yandex_compute_instance.vm-bastion.network_interface.0.ip_address
-    bastion_zone        = yandex_compute_instance.vm-bastion.zone
-    vm_1_name           = yandex_compute_instance.vm-server-1.name
-    vm_1_external_ip    = yandex_compute_instance.vm-server-1.network_interface.0.nat_ip_address
-    vm_1_internal_ip    = yandex_compute_instance.vm-server-1.network_interface.0.ip_address
-    vm_1_zone           = yandex_compute_instance.vm-server-1.zone
-    vm_2_name           = yandex_compute_instance.vm-server-2.name
-    vm_2_external_ip    = yandex_compute_instance.vm-server-2.network_interface.0.nat_ip_address
-    vm_2_internal_ip    = yandex_compute_instance.vm-server-2.network_interface.0.ip_address
-    vm_2_zone           = yandex_compute_instance.vm-server-2.zone
+    bastion_name           = yandex_compute_instance.vm-bastion.name
+    bastion_external_ip    = yandex_compute_instance.vm-bastion.network_interface.0.nat_ip_address
+    bastion_internal_ip    = yandex_compute_instance.vm-bastion.network_interface.0.ip_address
+    bastion_zone           = yandex_compute_instance.vm-bastion.zone
+    vm_1_name              = yandex_compute_instance.vm-server-1.name
+    vm_1_external_ip       = yandex_compute_instance.vm-server-1.network_interface.0.nat_ip_address
+    vm_1_internal_ip       = yandex_compute_instance.vm-server-1.network_interface.0.ip_address
+    vm_1_zone              = yandex_compute_instance.vm-server-1.zone
+    vm_2_name              = yandex_compute_instance.vm-server-2.name
+    vm_2_external_ip       = yandex_compute_instance.vm-server-2.network_interface.0.nat_ip_address
+    vm_2_internal_ip       = yandex_compute_instance.vm-server-2.network_interface.0.ip_address
+    vm_2_zone              = yandex_compute_instance.vm-server-2.zone
+    prometheus_name        = yandex_compute_instance.vm-prometheus.name
+    prometheus_external_ip = yandex_compute_instance.vm-prometheus.network_interface.0.nat_ip_address
+    prometheus_internal_ip = yandex_compute_instance.vm-prometheus.network_interface.0.ip_address
+    prometheus_zone        = yandex_compute_instance.vm-prometheus.zone
   })
   filename = "${path.module}/terraform_generated.ini"
 

@@ -6,13 +6,11 @@ namespace: nginx
 
 consul: null
 
-log_format: '$remote_addr - $remote_user [$time_local] "$request" $status $body_bytes_sent "$http_referer" "$http_user_agent"'
-
 # Мониторим access.log
 paths:
   - name: access
     path: /var/log/nginx/access.log
-    format: '$remote_addr - $remote_user [$time_local] "$request" $status $body_bytes_sent "$http_referer" "$http_user_agent"'
+    format: chupin_combined
     # Гистограммы для анализа длительности запроса и размера ответа
     histogram_buckets: [.005, .01, .025, .05, .1, .25, .5, 1, 2.5, 5, 10]
     bytes_buckets: [100, 1000, 10000, 100000, 1000000, 10000000]

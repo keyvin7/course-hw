@@ -28,13 +28,6 @@
         mode: '0644'
         directory_mode: '0755'
 
-    - name: Copy nginx configuration
-      copy:
-        src: /home/chupin/course-hw/nginx.conf
-        dest: /etc/nginx/sites-available/default
-        backup: yes
-      notify: restart nginx
-
     - name: Start and enable nginx service
       systemd:
         name: nginx
