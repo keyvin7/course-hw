@@ -37,6 +37,21 @@ resource "yandex_compute_disk" "boot-disk-bastion" {
   image_id = "fd888dplf7gt1nguheht"
 }
 
+resource "yandex_compute_disk" "boot-disk-prometheus" {
+  name     = "boot-disk-prometheus"
+  type     = "network-hdd"
+  zone     = "ru-central1-a"
+  size     = "50"
+  image_id = "fd888dplf7gt1nguheht"
+}
+
+resource "yandex_compute_disk" "boot-disk-grafana" {
+  name     = "boot-disk-boot-disk-grafana"
+  type     = "network-hdd"
+  zone     = "ru-central1-a"
+  size     = "50"
+  image_id = "fd888dplf7gt1nguheht"
+}
 
 resource "yandex_compute_instance" "vm-server-1" {
   name = "vm-server-1"
@@ -107,6 +122,51 @@ resource "yandex_compute_instance" "vm-bastion" {
   }
 }
 
+resource "yandex_compute_instance" "vm-prometheus" {
+  name = "vm-prometheus"
+  zone = "ru-central1-a"
+
+  resources {
+    cores  = 2
+    memory = 4
+  }
+
+  boot_disk {
+    disk_id = yandex_compute_disk.boot-disk-prometheus.id
+  }
+
+  network_interface {
+    subnet_id = yandex_vpc_subnet.subnet-int-prometheus.id
+    nat       = true
+  }
+
+  metadata = {
+    user-data = "${file("/home/chupin/course-hw/meta.txt")}"
+  }
+}
+
+resource "yandex_compute_instance" "vm-grafana" {
+  name = "vm-grafana"
+  zone = "ru-central1-a"
+
+  resources {
+    cores  = 2
+    memory = 4
+  }
+
+  boot_disk {
+    disk_id = yandex_compute_disk.boot-disk-grafana.id
+  }
+
+  network_interface {
+    subnet_id = yandex_vpc_subnet.subnet-ext-grafana.id
+    nat       = true
+  }
+
+  metadata = {
+    user-data = "${file("/home/chupin/course-hw/meta.txt")}"
+  }
+}
 
 resource "yandex_vpc_network" "network-1" {
   name = "network1"
@@ -131,6 +191,20 @@ resource "yandex_vpc_subnet" "subnet-ext" {
   zone           = "ru-central1-b"
   network_id     = yandex_vpc_network.network-1.id
   v4_cidr_blocks = ["192.168.30.0/24"]
+}
+
+resource "yandex_vpc_subnet" "subnet-int-prometheus" {
+  name           = "subnet-int-prometheus"
+  zone           = "ru-central1-a"
+  network_id     = yandex_vpc_network.network-1.id
+  v4_cidr_blocks = ["192.168.50.0/24"]
+}
+
+resource "yandex_vpc_subnet" "subnet-ext-grafana" {
+  name           = "subnet-int-grafana"
+  zone           = "ru-central1-a"
+  network_id     = yandex_vpc_network.network-1.id
+  v4_cidr_blocks = ["192.168.60.0/24"]
 }
 
 resource "yandex_vpc_subnet" "public-subnet-alb" {

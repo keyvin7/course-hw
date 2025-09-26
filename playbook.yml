@@ -35,15 +35,199 @@
         backup: yes
       notify: restart nginx
 
-
     - name: Start and enable nginx service
       systemd:
         name: nginx
         state: started
         enabled: yes
 
+    - name: Create system user for node_exporter
+      user:
+        name: node_exporter
+        system: yes
+        shell: /bin/false
+        home: /var/lib/node_exporter
+        state: present
+
+    - name: Create directories for node_exporter
+      file:
+        path: /var/lib/node_exporter
+        owner: node_exporter
+        group: node_exporter
+        mode: '0755'
+        state: directory
+
+    - name: Download node_exporter tarball
+      get_url:
+        url: "https://github.com/prometheus/node_exporter/releases/download/v1.9.1/node_exporter-1.9.1.linux-amd64.tar.gz"
+        dest: /tmp/node_exporter.tar.gz
+      register: download_result
+      until: download_result is succeeded
+      retries: 3
+      delay: 10
+
+    - name: Unpack node_exporter
+      unarchive:
+        src: /tmp/node_exporter.tar.gz
+        dest: /tmp
+        remote_src: yes
+        extra_opts: "--strip-components=1"
+        owner: node_exporter
+        group: node_exporter
+
+    - name: Install node_exporter binary
+      copy:
+        remote_src: yes
+        src: /tmp/node_exporter
+        dest: /usr/local/bin/node_exporter
+        owner: root
+        group: root
+        mode: '0755'
+      notify: restart node_exporter
+
+    - name: Create systemd service file for node_exporter
+      template:
+        src: node_exporter.service.j2
+        dest: /etc/systemd/system/node_exporter.service
+        mode: '0644'
+      notify:
+        - daemon-reload
+        - restart node_exporter
+
+    - name: Ensure node_exporter service is enabled and started
+      systemd:
+        name: node_exporter
+        state: started
+        enabled: yes
+
+    - name: Clean up temporary files
+      file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /tmp/node_exporter.tar.gz
+        - /tmp/node_exporter
+
+    - name: Create system user for nginx_log_exporter
+      user:
+        name: nginx_log_exporter
+        system: yes
+        shell: /bin/false
+        home: /var/lib/nginx_log_exporter
+        state: present
+
+    - name: Create config directory
+      file:
+        path: /etc/nginx_log_exporter
+        state: directory
+        mode: '0755'
+
+    - name: Download nginx_log_exporter tarball
+      get_url:
+        url: "https://github.com/martin-helmich/prometheus-nginxlog-exporter/releases/download/v1.9.2/prometheus-nginxlog-exporter_1.9.2_linux_amd64.tar.gz"
+        dest: /tmp
+      register: download_result
+      until: download_result is succeeded
+      retries: 3
+      delay: 10
+
+    - name: Create temporary extraction directory
+      file:
+        path: /tmp/nginx-log-exporter
+        state: directory
+        mode: '0755'
+
+    - name: Unpack nginx_log_exporter
+      unarchive:
+        src: /tmp/prometheus-nginxlog-exporter_1.9.2_linux_amd64.tar.gz
+        dest: /tmp/nginx-log-exporter/
+        remote_src: yes
+        owner: nginx_log_exporter
+        group: nginx_log_exporter
+
+    - name: Install nginx_log_exporter binary
+      copy:
+        remote_src: yes
+        src: /tmp/nginx-log-exporter/
+        dest: /usr/local/bin/nginx-log-exporter/
+        owner: root
+        group: root
+        mode: '0755'
+
+    - name: Create configuration file for nginx_log_exporter
+      template:
+        src: config.yml.j2
+        dest: /etc/nginx_log_exporter/config.yml
+        mode: '0644'
+
+    - name: Create systemd service file for nginx_log_exporter
+      template:
+        src: nginx_log_exporter.service.j2
+        dest: /etc/systemd/system/nginx-log-exporter.service
+        mode: '0644'
+      notify:
+        - daemon-reload
+        - restart nginx_log_exporter
+
+    - name: Ensure nginx_log_exporter service is enabled and started
+      systemd:
+        name: nginx-log-exporter
+        state: started
+        enabled: yes
+
+    - name: Add nginx_log_exporter user to nginx group
+      user:
+        name: nginx_log_exporter
+        groups: www-data
+        append: yes
+
+    - name: Set correct permissions on nginx log files
+      file:
+        path: /var/log/nginx
+        owner: root
+        group: www-data
+        mode: '0755'
+        recurse: yes
+
+    - name: Ensure nginx log files are readable
+      file:
+        path: /var/log/nginx/access.log
+        owner: root
+        group: www-data
+        mode: '0644'
+      ignore_errors: yes
+
+    - name: Ensure nginx_log_exporter service is enabled and started
+      systemd:
+        name: nginx-log-exporter
+        state: started
+        enabled: yes
+
+
+#    - name: Clean up temporary files
+#      file:
+#        path: "{{ item }}"
+#        state: absent
+#      loop:
+#        - /tmp/prometheus-nginxlog-exporter/
+#        - /tmp/nginx_log_exporter/
+
   handlers:
     - name: restart nginx
       systemd:
         name: nginx
+        state: restarted
+
+    - name: daemon-reload
+      systemd:
+        daemon_reload: yes
+
+    - name: restart node_exporter
+      systemd:
+        name: node_exporter
+        state: restarted
+
+    - name: restart nginx_log_exporter
+      systemd:
+        name: nginx-log-exporter
         state: restarted

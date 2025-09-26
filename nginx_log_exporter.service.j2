@@ -1,0 +1,15 @@
+[Unit]
+Description=Nginx Log Exporter
+Documentation=https://github.com/martin-helmich/prometheus-nginxlog-exporter
+After=network-online.target nginx.target
+Wants=network-online.target
+
+[Service]
+User=nginx_log_exporter
+Group=nginx_log_exporter
+Type=simple
+Restart=on-failure
+ExecStart=/usr/local/bin/nginx-log-exporter/prometheus-nginxlog-exporter -config-file /etc/nginx_log_exporter/config.yml
+
+[Install]
+WantedBy=multi-user.target
